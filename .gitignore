@@ -1,0 +1,6 @@
+.env
+__pycache__/
+models_weights/
+tokenizers/
+babyllama.ipynb 
+transformer.ipynb
