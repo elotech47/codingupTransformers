@@ -7,3 +7,6 @@ transformer.ipynb
 tokenizers_en.json
 tokenizers_fr.json
 .neptune/
+.llmEnv/
+*.txt
+
