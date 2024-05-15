@@ -4,7 +4,7 @@ def get_config():
     config = {
         'source_lang': 'en',
         'target_lang': 'fr',
-        'batch_size': 4,
+        'batch_size': 16,
         'seq_len': 350,
         'd_model': 512,
         'nhead': 8,
@@ -16,7 +16,7 @@ def get_config():
         'model_folder': 'models_weights',
         'model_fileame': 'transformermodel',
         "preload_model": None,
-        "tokenizer_file": "tokenizers/tokenizers_{0}.json",
+        "tokenizer_file": "tokenizers_{0}.json",
         "neptune_project": "DMO-LAB/llmfromscratch",
         "experiment_name": "simple_transformer",
         "tags": "transformer,translation,books,opus, attention",
