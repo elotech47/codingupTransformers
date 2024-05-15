@@ -11,8 +11,8 @@ class TranslationDataset(Dataset):
         self.seq_len = seq_len
         self.data = dataset
         self.pad_token_id = self.src_tokenizer.token_to_id("[PAD]")
-        self.sos_token_id = self.tgt_tokenizer.token_to_id("[CLS]")
-        self.eos_token_id = self.tgt_tokenizer.token_to_id("[SEP]")
+        self.sos_token_id = self.tgt_tokenizer.token_to_id("[SOS]")
+        self.eos_token_id = self.tgt_tokenizer.token_to_id("[EOS]")
         
     def __len__(self):
         return len(self.data)
@@ -25,9 +25,9 @@ class TranslationDataset(Dataset):
         src_tokens = self.src_tokenizer.encode(src_text).ids
         tgt_tokens = self.tgt_tokenizer.encode(tgt_text).ids 
         
-        # Ensure sequence length is large enough for tokens and special tokens
-        if len(src_tokens) + 2 > self.seq_len or len(tgt_tokens) + 1 > self.seq_len:
-            raise ValueError("Sequence length too small for the given input texts.")
+        # # Ensure sequence length is large enough for tokens and special tokens
+        # if len(src_tokens) + 2 > self.seq_len or len(tgt_tokens) + 1 > self.seq_len:
+        #     raise ValueError("Sequence length too small for the given input texts.")
 
         # Truncate tokens if necessary
         src_tokens = src_tokens[:self.seq_len - 2]
@@ -42,19 +42,19 @@ class TranslationDataset(Dataset):
             torch.tensor(src_tokens, dtype=torch.int64),  # Source tokens
             torch.tensor([self.eos_token_id], dtype=torch.int64),  # EOS token
             torch.tensor(src_padding, dtype=torch.int64)  # Padding
-        ])
+        ]).type(torch.int64)
         
         decoder_input = torch.cat([
             torch.tensor([self.sos_token_id], dtype=torch.int64),  # SOS token
             torch.tensor(tgt_tokens, dtype=torch.int64),  # Target tokens
             torch.tensor(tgt_padding, dtype=torch.int64)  # Padding
-        ])
+        ]).type(torch.int64)
         
         label = torch.cat([
             torch.tensor(tgt_tokens, dtype=torch.int64),  # Target tokens
             torch.tensor([self.eos_token_id], dtype=torch.int64),  # EOS token
             torch.tensor(tgt_padding, dtype=torch.int64)  # Padding
-        ])
+        ]).type(torch.int64)
         
         assert len(encoder_input) == self.seq_len
         assert len(decoder_input) == self.seq_len
