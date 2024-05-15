@@ -163,6 +163,12 @@ def evaluate_model(model, validation_data, src_tokenizer, tgt_tokenizer, max_len
             logger["metrics/cer"].append(cer)
         print_msg(f"Character error rate: {cer}")
         
+
+def learning_rate_scheduler(optimizer, step, d_model, warmup_steps=4000):
+    lr = (d_model ** -0.5) * min(step ** (-0.5), step * warmup_steps ** (-1.5))
+    for param_group in optimizer.param_groups:
+        param_group['lr'] = lr
+    return lr
         
             
 
@@ -188,7 +194,7 @@ def train_model(config, logger=None):
     model = create_model(config, src_tokenizer.get_vocab_size(), tgt_tokenizer.get_vocab_size())
     
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'], eps=1e-8)
+    optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'], betas=(0.9, 0.98), eps=1e-9)
     
     initial_epoch = 0
     global_step = 0
@@ -227,11 +233,16 @@ def train_model(config, logger=None):
 
             batch_iterator.set_postfix({"loss": f"{loss.item():6.3f}"})
 
-            
+
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
             #evaluate_model(model, val_loader, src_tokenizer, tgt_tokenizer, config['seq_len'], device, lambda x: batch_iterator.write(x), global_step=global_step, logger=logger)
             
+            lr = learning_rate_scheduler(optimizer, global_step, config['d_model'])
+            if logger is not None:
+                logger["performance/lr"].append(lr)
+
+
             total_loss += loss.item()
             global_step += 1
             
