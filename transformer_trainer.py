@@ -23,7 +23,8 @@ load_dotenv()
 NEPTUNE_API_TOKEN = os.getenv('NEPTUNE_API_TOKEN')
 
 def initialize_logger(config):
-    run = neptune.init_run(project=config['neptune_project'], api_token=NEPTUNE_API_TOKEN, name=config['experiment_name'], tags=config['tags'])
+    run = neptune.init_run(project=config['neptune_project'], api_token=NEPTUNE_API_TOKEN, name=config['experiment_name'], tags=config['tags'],
+                           source_files=["*.py", "config.py", "dataset.py", "transformer.py", "transformer_trainer.py", "requirements.txt"])
     params = {k: v for k, v in config.items() if k not in ['neptune_project', 'experiment_name', 'tags']}
     run['parameters'] = params
     return run
@@ -74,7 +75,7 @@ def create_model(config, src_vocab_size, tgt_vocab_size):
     model = transformer_builder(src_vocab_size, tgt_vocab_size, d_model=config['d_model'], src_seq_len=config['seq_len'], tgt_seq_len=config['seq_len'], num_layers=config['num_layers'], num_heads=config['nhead'], d_ff=config['dim_feedforward'], dropout=config['dropout'])
     return model
 
-def greedy_decode(model, encoder_input, encoder_mask, src_tokenizer, tgt_tokenizer, max_len, device):
+def greedy_decode(model, encoder_input, encoder_mask, tgt_tokenizer, max_len, device, print_msg):
     sos_idx = tgt_tokenizer.token_to_id("[SOS]")
     eos_idx = tgt_tokenizer.token_to_id("[EOS]")
     
@@ -89,6 +90,7 @@ def greedy_decode(model, encoder_input, encoder_mask, src_tokenizer, tgt_tokeniz
         decoder_input = torch.cat([decoder_input, torch.empty(1, 1, dtype=torch.int64).fill_(next_token.item()).type_as(encoder_input).to(device)], dim=1)
         
         if next_token.item() == eos_idx or decoder_input.size(1) >= max_len:
+            print_msg(f"Stopped decoding at step {decoder_input.size(1)}")
             break
         
     return decoder_input.squeeze(0)
@@ -118,7 +120,7 @@ def evaluate_model(model, validation_data, src_tokenizer, tgt_tokenizer, max_len
             
             assert encoder_input.size(0) == 1, "Batch size must be 1 for evaluation"
             
-            output = greedy_decode(model, encoder_input, encoder_mask, src_tokenizer, tgt_tokenizer, max_len, device)
+            output = greedy_decode(model, encoder_input, encoder_mask, tgt_tokenizer, max_len, device, print_msg)
           
             source_text = batch['src_text'][0]
             target_text = batch['tgt_text'][0]
@@ -206,6 +208,7 @@ def train_model(config, logger=None):
                                     label_smoothing=0.1).to(device)
     
     for epoch in range(initial_epoch, config['epochs']):
+        torch.cuda.empty_cache()
         model.train()
         total_loss = 0
         batch_iterator = tqdm(train_loader, desc=f"Training epoch {epoch:02d}")
@@ -219,11 +222,15 @@ def train_model(config, logger=None):
             
             output = model(encoder_input, decoder_input, encoder_mask, decoder_mask) # [batch_size, seq_len, tgt_vocab_size]
             loss = criterion(output.view(-1, output.size(-1)), labels.view(-1)) # [batch_size * seq_len, tgt_vocab_size], [batch_size * seq_len]
+
             loss.backward()
+
             batch_iterator.set_postfix({"loss": f"{loss.item():6.3f}"})
+
+            
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
-            # evaluate_model(model, val_loader, src_tokenizer, tgt_tokenizer, config['seq_len'], device, lambda x: batch_iterator.write(x), global_step=global_step, logger=logger)
+            #evaluate_model(model, val_loader, src_tokenizer, tgt_tokenizer, config['seq_len'], device, lambda x: batch_iterator.write(x), global_step=global_step, logger=logger)
             
             total_loss += loss.item()
             global_step += 1
@@ -249,8 +256,8 @@ def train_model(config, logger=None):
             'global_step': global_step
         }, model_filename)
         
-        if logger is not None:
-            logger["model_checkpoints/en_fr_translation_model"].upload(model_filename)
+        # if logger is not None:
+        #     logger[f"model_weights/epoch_{epoch}"].upload(model_filename)   
     
     if logger is not None:
         logger.stop()
