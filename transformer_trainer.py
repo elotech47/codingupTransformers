@@ -82,15 +82,20 @@ def greedy_decode(model, encoder_input, encoder_mask, tgt_tokenizer, max_len, de
     encoder_output = model.encode(encoder_input, encoder_mask)
     decoder_input = torch.empty(1, 1, dtype=torch.int64).fill_(sos_idx).type_as(encoder_input).to(device)
     while True:
-        decoder_mask = causal_mask(decoder_input.size(1)).type_as(encoder_input).to(device)
+        if decoder_input.size(1) == max_len:
+            print_msg(f"Stopped decoding at step {decoder_input.size(1)}")
+            break
+        decoder_mask = causal_mask(decoder_input.size(1)).type_as(encoder_mask).to(device)
+
+
         decoder_output = model.decode(encoder_output, encoder_mask, decoder_input, decoder_mask)
         
         prob = model.generator(decoder_output[:, -1])
         _, next_token = torch.max(prob, dim=-1)
         decoder_input = torch.cat([decoder_input, torch.empty(1, 1, dtype=torch.int64).fill_(next_token.item()).type_as(encoder_input).to(device)], dim=1)
         
-        if next_token.item() == eos_idx or decoder_input.size(1) >= max_len:
-            print_msg(f"Stopped decoding at step {decoder_input.size(1)}")
+        if next_token.item() == eos_idx:
+            print_msg(f"EOS token found at step {decoder_input.size(1)}")
             break
         
     return decoder_input.squeeze(0)
@@ -236,11 +241,9 @@ def train_model(config, logger=None):
 
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
-            #evaluate_model(model, val_loader, src_tokenizer, tgt_tokenizer, config['seq_len'], device, lambda x: batch_iterator.write(x), global_step=global_step, logger=logger)
-            
-            lr = learning_rate_scheduler(optimizer, global_step, config['d_model'])
-            if logger is not None:
-                logger["performance/lr"].append(lr)
+
+            if i % 200 == 0:
+                evaluate_model(model, val_loader, src_tokenizer, tgt_tokenizer, config['seq_len'], device, lambda x: batch_iterator.write(x), global_step=global_step, logger=logger)
 
 
             total_loss += loss.item()
@@ -249,6 +252,9 @@ def train_model(config, logger=None):
             if logger is not None:
                 logger["performance/train_loss"].append(loss.item())
                 
+            lr = learning_rate_scheduler(optimizer, global_step, config['d_model'])
+            if logger is not None:
+                logger["performance/lr"].append(lr)
 
         avg_loss = total_loss / len(train_loader)
         if logger is not None:
