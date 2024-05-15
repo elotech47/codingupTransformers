@@ -114,6 +114,7 @@ class ResidualConnection(nn.Module):
         self.norm = LayerNormalization()
         
     def forward(self, x, sublayer):
+       # print(f"ResidualConnection input shape: {x.shape}")
         return x + self.dropout(sublayer(self.norm(x)))
     
 
@@ -126,6 +127,7 @@ class EncoderBlock(nn.Module):
         self.residual_connection2 = ResidualConnection(dropout)
         
     def forward(self, x, mask):
+       # print(f"EncoderBlock input shape: {x.shape} and mask shape: {mask.shape}")
         x = self.residual_connection1(x, lambda x: self.self_attention(x, x, x, mask))
         x = self.residual_connection2(x, self.feed_forward)
         return x
@@ -137,6 +139,8 @@ class Encoder(nn.Module):
         self.norm_layer = LayerNormalization()
         
     def forward(self, x, mask):
+        # x has shape (batch_size, seq_len, d_model) and mask has shape (batch_size, 1, seq_len)
+       # print(f"Encoder input shape: {x.shape} and mask shape: {mask.shape}")
         for layer in self.encoder_layers:
             x = layer(x, mask)
         return self.norm_layer(x)
@@ -199,7 +203,7 @@ class Transformer(nn.Module):
     def encode(self, src, src_mask):
         return self.encoder(self.src_positional_encoding(self.src_embed(src)), src_mask)
     
-    def decode(self, tgt, encoder_output, src_mask, tgt_mask):
+    def decode(self, encoder_output, src_mask, tgt, tgt_mask):
         return self.decoder(self.tgt_positional_encoding(self.tgt_embed(tgt)), encoder_output, src_mask, tgt_mask)
     
     
