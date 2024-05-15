@@ -4,7 +4,7 @@ def get_config():
     config = {
         'source_lang': 'en',
         'target_lang': 'fr',
-        'batch_size': 16,
+        'batch_size': 64,
         'seq_len': 350,
         'd_model': 512,
         'nhead': 8,
@@ -15,7 +15,7 @@ def get_config():
         'epochs': 10,
         'model_folder': 'models_weights',
         'model_filename': 'transformermodel',
-        "preload_model": '0',
+        "preload_model": None,
         "tokenizer_file": "tokenizers_{0}.json",
         "neptune_project": "DMO-LAB/llmfromscratch",
         "experiment_name": "simple_transformer",
