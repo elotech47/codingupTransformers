@@ -4,3 +4,6 @@ models_weights/
 tokenizers/
 babyllama.ipynb 
 transformer.ipynb
+tokenizers_en.json
+tokenizers_fr.json
+.neptune/
