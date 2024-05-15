@@ -135,9 +135,9 @@ def evaluate_model(model, validation_data, src_tokenizer, tgt_tokenizer, max_len
             print_msg(f"Predicted: {predicted_text}")
             print_msg("=" * columns)
             if logger is not None:
-                logger.log_text(f"source_{count}", source_text, step=global_step)
-                logger.log_text(f"target_{count}", target_text, step=global_step)
-                logger.log_text(f"predicted_{count}", predicted_text, step=global_step)
+                logger[f"Global step: {global_step}/Source text_{count}"] = source_text
+                logger[f"Global step: {global_step}/Target text_{count}"] = target_text
+                logger[f"Global step: {global_step}/Predicted text_{count}"] = predicted_text
                 
             if count >= num_examples:
                 break
@@ -146,19 +146,19 @@ def evaluate_model(model, validation_data, src_tokenizer, tgt_tokenizer, max_len
         metric = torchmetrics.BLEUScore()
         bleu_score = metric(predicted_texts, target_texts)
         if logger is not None:
-            logger.log_metric("bleu_score", bleu_score, step=global_step)
+            logger["metrics/bleu"].append(bleu_score)
         print_msg(f"BLEU score: {bleu_score}")  
         
         metric = torchmetrics.WordErrorRate()
         wer = metric(predicted_texts, target_texts)
         if logger is not None:
-            logger.log_metric("wer", wer, step=global_step)
+            logger["metrics/wer"].append(wer)
         print_msg(f"Word error rate: {wer}")
         
         metric = torchmetrics.CharacterErrorRate()
         cer = metric(predicted_texts, target_texts)
         if logger is not None:
-            logger.log_metric("cer", cer, step=global_step)
+            logger["metrics/cer"].append(cer)
         print_msg(f"Character error rate: {cer}")
         
         
@@ -225,12 +225,12 @@ def train_model(config, logger=None):
             global_step += 1
             
             if logger is not None:
-                logger.log_metric("train_loss", loss.item(), step=global_step)
+                logger["performance/train_loss"].append(loss.item())
                 
 
         avg_loss = total_loss / len(train_loader)
         if logger is not None:
-            logger.log_metric("train_avg_loss", avg_loss, step=epoch)
+            logger["performance/avg_train_loss"].append(avg_loss)
         
         print(f"Epoch {epoch:02d} - Average loss: {avg_loss:6.3f}")
         
@@ -246,7 +246,7 @@ def train_model(config, logger=None):
         }, model_filename)
         
         if logger is not None:
-            logger.log_artifact(model_filename)
+            logger["model_checkpoints/en_fr_translation_model"].upload(model_filename)
     
     if logger is not None:
         logger.stop()
