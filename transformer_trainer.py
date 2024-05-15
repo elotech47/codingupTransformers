@@ -34,15 +34,14 @@ def get_all_sentences(dataset, lang):
 
 def create_tokenizer(config, dataset, lang):
     tokenizer_path = Path(config['tokenizer_file'].format(lang))
-    if not Path(tokenizer_path).exists():
+    if not Path.exists(tokenizer_path):
         tokenizer = Tokenizer(WordLevel(unk_token="[UNK]"))
         tokenizer.pre_tokenizer = Whitespace()
-        trainer = WordLevelTrainer(special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"], min_frequency=2)
-        tokenizer.train_from_iterator(get_all_sentences(dataset, lang), trainer)
+        trainer = WordLevelTrainer(special_tokens=["[UNK]", "[PAD]", "[SOS]", "[EOS]"], min_frequency=2)
+        tokenizer.train_from_iterator(get_all_sentences(dataset, lang), trainer=trainer)
         tokenizer.save(str(tokenizer_path))
     else:
         tokenizer = Tokenizer.from_file(str(tokenizer_path))
-        
     return tokenizer
 
 def get_dataset(config):
@@ -72,7 +71,6 @@ def get_dataset(config):
 
 
 def create_model(config, src_vocab_size, tgt_vocab_size):
-    #transformer_builder(src_vocab_size, tgt_vocab_size, d_model, src_seq_len, tgt_seq_len, num_layers, num_heads, d_ff, dropout)
     model = transformer_builder(src_vocab_size, tgt_vocab_size, d_model=config['d_model'], src_seq_len=config['seq_len'], tgt_seq_len=config['seq_len'], num_layers=config['num_layers'], num_heads=config['nhead'], d_ff=config['dim_feedforward'], dropout=config['dropout'])
     return model
 
@@ -80,7 +78,7 @@ def greedy_decode(model, encoder_input, encoder_mask, src_tokenizer, tgt_tokeniz
     sos_idx = tgt_tokenizer.token_to_id("[SOS]")
     eos_idx = tgt_tokenizer.token_to_id("[EOS]")
     
-    encoder_output = model.encoder(encoder_input, encoder_mask)
+    encoder_output = model.encode(encoder_input, encoder_mask)
     decoder_input = torch.empty(1, 1, dtype=torch.int64).fill_(sos_idx).type_as(encoder_input).to(device)
     while True:
         decoder_mask = causal_mask(decoder_input.size(1)).type_as(encoder_input).to(device)
@@ -114,8 +112,9 @@ def evaluate_model(model, validation_data, src_tokenizer, tgt_tokenizer, max_len
     with torch.no_grad():
         for batch in validation_data:
             count += 1
-            encoder_input = batch['encoder_input'].to(device)
-            encoder_mask = batch['encoder_mask'].to(device)
+
+            encoder_input = batch['encoder_input'].to(device) # [batch_size, seq_len]
+            encoder_mask = batch['encoder_mask'].to(device) # [batch_size, seq_len]
             
             assert encoder_input.size(0) == 1, "Batch size must be 1 for evaluation"
             
@@ -129,17 +128,18 @@ def evaluate_model(model, validation_data, src_tokenizer, tgt_tokenizer, max_len
             target_texts.append(target_text)
             predicted_texts.append(predicted_text)
             
-            print_msg("=" * columns)
-            print_msg(f"Source: {source_text}")
-            print_msg(f"Target: {target_text}")
-            print_msg(f"Predicted: {predicted_text}")
-            print_msg("=" * columns)
+            print_msg("-" * columns)
+            print_msg(f"{f'Source: ':>12}{source_text}")
+            print_msg(f"{f'Target: ':>12}{target_text}")
+            print_msg(f"{f'Predicted: ':>12}{predicted_text}")
+  
             if logger is not None:
                 logger[f"Global step: {global_step}/Source text_{count}"] = source_text
                 logger[f"Global step: {global_step}/Target text_{count}"] = target_text
                 logger[f"Global step: {global_step}/Predicted text_{count}"] = predicted_text
                 
             if count >= num_examples:
+                print_msg("-" * columns)
                 break
             
         # evaluate BLEU score and the character error rate
@@ -155,7 +155,7 @@ def evaluate_model(model, validation_data, src_tokenizer, tgt_tokenizer, max_len
             logger["metrics/wer"].append(wer)
         print_msg(f"Word error rate: {wer}")
         
-        metric = torchmetrics.CharacterErrorRate()
+        metric = torchmetrics.CharErrorRate()
         cer = metric(predicted_texts, target_texts)
         if logger is not None:
             logger["metrics/cer"].append(cer)
@@ -198,6 +198,8 @@ def train_model(config, logger=None):
         initial_epoch = checkpoint['epoch'] + 1
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         global_step = checkpoint['global_step']
+        model.load_state_dict(checkpoint['model_state_dict'])
+        del checkpoint
         
         
     criterion = nn.CrossEntropyLoss(ignore_index=tgt_tokenizer.token_to_id("[PAD]"),
@@ -220,6 +222,8 @@ def train_model(config, logger=None):
             loss.backward()
             batch_iterator.set_postfix({"loss": f"{loss.item():6.3f}"})
             optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+            # evaluate_model(model, val_loader, src_tokenizer, tgt_tokenizer, config['seq_len'], device, lambda x: batch_iterator.write(x), global_step=global_step, logger=logger)
             
             total_loss += loss.item()
             global_step += 1
