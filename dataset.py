@@ -25,10 +25,6 @@ class TranslationDataset(Dataset):
         src_tokens = self.src_tokenizer.encode(src_text).ids
         tgt_tokens = self.tgt_tokenizer.encode(tgt_text).ids 
         
-        # # Ensure sequence length is large enough for tokens and special tokens
-        # if len(src_tokens) + 2 > self.seq_len or len(tgt_tokens) + 1 > self.seq_len:
-        #     raise ValueError("Sequence length too small for the given input texts.")
-
         # Truncate tokens if necessary
         src_tokens = src_tokens[:self.seq_len - 2]
         tgt_tokens = tgt_tokens[:self.seq_len - 1]
@@ -37,39 +33,36 @@ class TranslationDataset(Dataset):
         tgt_padding = [self.pad_token_id] * (self.seq_len - len(tgt_tokens) - 1)
         
         # Add SOS and EOS tokens to the source text
-        encoder_input = torch.cat([
-            torch.tensor([self.sos_token_id], dtype=torch.int64),  # SOS token
-            torch.tensor(src_tokens, dtype=torch.int64),  # Source tokens
-            torch.tensor([self.eos_token_id], dtype=torch.int64),  # EOS token
-            torch.tensor(src_padding, dtype=torch.int64)  # Padding
-        ]).type(torch.int64)
-        
-        decoder_input = torch.cat([
-            torch.tensor([self.sos_token_id], dtype=torch.int64),  # SOS token
-            torch.tensor(tgt_tokens, dtype=torch.int64),  # Target tokens
-            torch.tensor(tgt_padding, dtype=torch.int64)  # Padding
-        ]).type(torch.int64)
-        
-        label = torch.cat([
-            torch.tensor(tgt_tokens, dtype=torch.int64),  # Target tokens
-            torch.tensor([self.eos_token_id], dtype=torch.int64),  # EOS token
-            torch.tensor(tgt_padding, dtype=torch.int64)  # Padding
-        ]).type(torch.int64)
+        encoder_input = torch.tensor(
+            [self.sos_token_id] + src_tokens + [self.eos_token_id] + src_padding,
+            dtype=torch.int64
+        )
+        decoder_input = torch.tensor(
+            [self.sos_token_id] + tgt_tokens + tgt_padding,
+            dtype=torch.int64
+        )
+        label = torch.tensor(
+            tgt_tokens + [self.eos_token_id] + tgt_padding,
+            dtype=torch.int64
+        )
         
         assert len(encoder_input) == self.seq_len
         assert len(decoder_input) == self.seq_len
         assert len(label) == self.seq_len
         
+        encoder_mask = (encoder_input != self.pad_token_id).unsqueeze(0).unsqueeze(0).int()
+        decoder_mask = (decoder_input != self.pad_token_id).unsqueeze(0).unsqueeze(0).int() & causal_mask(self.seq_len).unsqueeze(0)
+        
         return {
             'encoder_input': encoder_input,
-            'encoder_mask' : (encoder_input != self.pad_token_id).unsqueeze(0).unsqueeze(0).int(),  # (1, 1, seq_len)
+            'encoder_mask': encoder_mask,
             'decoder_input': decoder_input,
-            'decoder_mask': (decoder_input != self.pad_token_id).unsqueeze(0).unsqueeze(0).int() & causal_mask(decoder_input.size(0)),  # (1, seq_len, seq_len)
+            'decoder_mask': decoder_mask,
             'labels': label,
             'src_text': src_text,
             'tgt_text': tgt_text
         }
 
 def causal_mask(seq_len):
-    mask = torch.tril(torch.ones(seq_len, seq_len)).transpose(0, 1).type(torch.int)  # Lower triangular matrix
+    mask = torch.tril(torch.ones((seq_len, seq_len), dtype=torch.int))  # Lower triangular matrix
     return mask  # (seq_len, seq_len)
