@@ -43,9 +43,9 @@ class PositionalEncoding(nn.Module):
 class LayerNormalization(nn.Module):
     def __init__(self, features: int, eps: float = 1e-6):
         super(LayerNormalization, self).__init__()
-        self.esp = esp
-        self.alpha = nn.Parameter(torch.tensor(features)) # Multiplicative parameter
-        self.bias = nn.Parameter(torch.tensor(features)) # Additive parameter
+        self.esp = eps
+        self.alpha = nn.Parameter(torch.ones(features)) # Multiplicative parameter
+        self.bias = nn.Parameter(torch.ones(features)) # Additive parameter
         
     def forward(self, x):
         mean = x.mean(-1, keepdim=True)
@@ -149,14 +149,14 @@ class Encoder(nn.Module):
     
 class DecoderBlock(nn.Module):
     
-    def __init__(self, self_attention: MultiHeadAttention, cross_attention: MultiHeadAttention, feed_forward: FeedForwardBlock, dropout: float):
+    def __init__(self, features, self_attention: MultiHeadAttention, cross_attention: MultiHeadAttention, feed_forward: FeedForwardBlock, dropout: float):
         super(DecoderBlock, self).__init__()
         self.self_attention = self_attention
         self.cross_attention = cross_attention
         self.feed_forward = feed_forward
-        self.residual_connection1 = ResidualConnection(dropout)
-        self.residual_connection2 = ResidualConnection(dropout)
-        self.residual_connection3 = ResidualConnection(dropout)
+        self.residual_connection1 = ResidualConnection(features=features, dropout=dropout)
+        self.residual_connection2 = ResidualConnection(features=features, dropout=dropout)
+        self.residual_connection3 = ResidualConnection(features=features, dropout=dropout)
         
     def forward(self, x, encoder_output, src_mask, tgt_mask): 
         x = self.residual_connection1(x, lambda x: self.self_attention(x, x, x, tgt_mask)) # decoder self attention
