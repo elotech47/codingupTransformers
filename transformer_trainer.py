@@ -35,6 +35,7 @@ def get_all_sentences(dataset, lang):
 
 def create_tokenizer(config, dataset, lang):
     tokenizer_path = Path(config['tokenizer_file'].format(lang))
+    print(f"Tokenizer file: {tokenizer_path}")  
     if not Path.exists(tokenizer_path):
         tokenizer = Tokenizer(WordLevel(unk_token="[UNK]"))
         tokenizer.pre_tokenizer = Whitespace()
